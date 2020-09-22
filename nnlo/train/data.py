@@ -17,7 +17,7 @@ class FilePreloader(Thread):
         self.file_open = file_open
         self.loaded = {} ## a dict of the loaded objects
         self.should_stop = False
-        
+
     def getFile(self, name):
         ## locks until the file is loaded, then return the handle
         return self.loaded.setdefault(name, self.file_open( name))
@@ -26,7 +26,7 @@ class FilePreloader(Thread):
         ## close the file and
         if name in self.loaded:
             self.loaded.pop(name).close()
-    
+
     def run(self):
         while not self.files_list:
             time.sleep(1)
@@ -65,7 +65,7 @@ class Data(object):
           batch_size: size of training batches
     """
     def finalize(self):
-        if self.caching_directory:            
+        if self.caching_directory:
             for fn in self.relocated:
                 logging.debug("removing cached file {}".format(fn))
                 os.system('rm -f {}'.format(fn))
@@ -77,7 +77,7 @@ class Data(object):
         """
         self.batch_size = batch_size
         self.caching_directory = cache if cache else os.environ.get('DATA_CACHE','')
-        self.copy_command = copy_command if copy_command else os.environ.get('DATA_COPY_COMMAND','cp {} {}')
+        self.copy_command = copy_command if copy_command else os.environ.get('DATA_COPY_COMMAND','aws s3 cp --no-sign-request --endpoint-url=https://s3.cern.ch s3://gan-bucket/{} {}')
         ## for regular copy it is "cp {} {}"
         ## for s3 it should be "s3cmd get s3://gan-bucket/{} {}"
         ## for xrootd it should be "xrdcp root://cms-xrd-global.cern.ch/{} {}", assuming a valid proxy
@@ -85,7 +85,7 @@ class Data(object):
 
     def set_caching_directory(self, cache):
         self.caching_directory = cache
-        
+
     def set_full_file_names(self, file_names):
         self.file_names = list(filter(None, file_names))
 
@@ -110,7 +110,7 @@ class Data(object):
                 else:
                     new_file_names.append( relocate )
                     self.relocated.append( relocate )
-                        
+
             self.file_names = new_file_names
         else:
             self.file_names = file_names
@@ -125,7 +125,7 @@ class Data(object):
                     yield B
             except StopIteration:
                 logging.warning("start over generator loop")
-                
+
     def generate_data(self):
        """Yields batches of training data until none are left."""
        leftovers = None
@@ -139,7 +139,7 @@ class Data(object):
            num_in_file = self.get_num_samples( cur_file_features )
 
            for cur_pos in range(0, num_in_file, self.batch_size):
-               next_pos = cur_pos + self.batch_size 
+               next_pos = cur_pos + self.batch_size
                if next_pos <= num_in_file:
                    yield ( self.get_batch( cur_file_features, cur_pos, next_pos ),
                            self.get_batch( cur_file_labels, cur_pos, next_pos ) )
@@ -162,7 +162,7 @@ class Data(object):
         """Input: a numpy array or list of numpy arrays.
             Gets elements between start_pos and end_pos in each array"""
         if self.is_numpy_array(data):
-            return data[start_pos:end_pos] 
+            return data[start_pos:end_pos]
         else:
             return [ arr[start_pos:end_pos] for arr in data ]
 
@@ -185,7 +185,7 @@ class Data(object):
 
     def load_data(self, in_file):
         """Input: name of file from which the data should be loaded
-            Returns: tuple (X,Y) where X and Y are numpy arrays containing features 
+            Returns: tuple (X,Y) where X and Y are numpy arrays containing features
                 and labels, respectively, for all data in the file
 
             Not implemented in base class; derived classes should implement this function"""
@@ -210,8 +210,8 @@ class H5Data(Data):
         self.fpl = None
         if preloading:
             self.fpl = FilePreloader( [] , file_open = lambda n : h5py.File(n,'r'), n_ahead=preloading)
-            self.fpl.start()          
-       
+            self.fpl.start()
+
 
     def load_data(self, in_file_name):
         """Loads numpy arrays from H5 file.
@@ -233,7 +233,7 @@ class H5Data(Data):
         else:
             label_adaptor = None
             label_name = self.labels_name
-        
+
         X = self.load_hdf5_data( h5_file[feature_name] )
         Y = self.load_hdf5_data( h5_file[label_name] )
         if feature_adaptor is not None:
@@ -244,10 +244,10 @@ class H5Data(Data):
             self.fpl.closeFile( in_file_name )
         else:
             h5_file.close()
-        return X,Y 
+        return X,Y
 
     def load_hdf5_data(self, data):
-        """Returns a numpy array or (possibly nested) list of numpy arrays 
+        """Returns a numpy array or (possibly nested) list of numpy arrays
             corresponding to the group structure of the input HDF5 data.
             If a group has more than one key, we give its datasets alphabetically by key"""
         if hasattr(data, 'keys'):

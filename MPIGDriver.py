@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
     # model arguments
     parser.add_argument('model_json', help='JSON file containing model architecture')
-    parser.add_argument('--trial-name', help='descriptive name for trial', 
+    parser.add_argument('--trial-name', help='descriptive name for trial',
             default='train', dest='trial_name')
 
     # training data arguments
@@ -47,7 +47,7 @@ if __name__ == '__main__':
     # configuration of network topology
     parser.add_argument('--masters', help='number of master processes', default=1, type=int)
     parser.add_argument('--n-processes', dest='processes', help='number of processes per worker', default=1, type=int)
-    parser.add_argument('--max-gpus', dest='max_gpus', help='max GPUs to use', 
+    parser.add_argument('--max-gpus', dest='max_gpus', help='max GPUs to use',
             type=int, default=-1)
     parser.add_argument('--master-gpu',help='master process should get a gpu',
             action='store_true', dest='master_gpu')
@@ -65,7 +65,7 @@ if __name__ == '__main__':
             dest='worker_optimizer', default='sgd')
     parser.add_argument('--worker-optimizer-params',help='worker optimizer parameters (string representation of a dict)',
             dest='worker_optimizer_params', default='{}')
-    parser.add_argument('--sync-every', help='how often to sync weights with master', 
+    parser.add_argument('--sync-every', help='how often to sync weights with master',
             default=1, type=int, dest='sync_every')
     parser.add_argument('--mode',help='Mode of operation.'
                         'One of "downpour" (Downpour), "easgd" (Elastic Averaging SGD) or "gem" (Gradient Energy Matching)',default='downpour',choices=['downpour','easgd','gem'])
@@ -81,11 +81,11 @@ if __name__ == '__main__':
 
     parser.add_argument('--checkpoint', help='Base name of the checkpointing file. If omitted no checkpointing will be done', default=None)
     parser.add_argument('--checkpoint-interval', help='Number of epochs between checkpoints', default=5, type=int, dest='checkpoint_interval')
-    
+
 
     args = parser.parse_args()
     model_name = os.path.basename(args.model_json).replace('.json','')
-    initialize_logger(filename=args.log_file, file_level=args.log_level, stream_level=args.log_level)    
+    initialize_logger(filename=args.log_file, file_level=args.log_level, stream_level=args.log_level)
 
     with open(args.train_data) as train_list_file:
         train_list = [ s.strip() for s in train_list_file.readlines() ]
@@ -96,7 +96,7 @@ if __name__ == '__main__':
 
     use_tf = args.tf
     use_torch = not use_tf
-    
+
     from TrainingDriver import make_model_weight, make_algo, make_loader
     model_weights = make_model_weight(args, use_torch)
 
@@ -131,16 +131,25 @@ if __name__ == '__main__':
 
 
     data = make_loader(args, args.features_name, args.labels_name, train_list)
-    algo = make_algo( args, use_tf, comm, validate_every=int(data.count_data()/args.batch ))
+
+    if comm.Get_rank() == 0:
+        data.set_file_names( train_list )
+        countData = data.count_data()
+    else:
+        countData = None
+
+    countData = comm.bcast(countData, root=0)
+
+    algo = make_algo( args, use_tf, comm, validate_every=int(countData/args.batch ))
 
     if args.restore:
         algo.load(args.restore)
 
     # Creating the MPIManager object causes all needed worker and master nodes to be created
     manager = MPIManager( comm=comm, data=data, algo=algo, model_builder=model_builder,
-                          num_epochs=args.epochs, train_list=train_list, val_list=val_list, 
+                          num_epochs=args.epochs, train_list=train_list, val_list=val_list,
                           num_masters=args.masters, num_processes=args.processes,
-                          synchronous=args.synchronous, 
+                          synchronous=args.synchronous,
                           verbose=args.verbose , monitor=args.monitor,
                           early_stopping=args.early_stopping,target_metric=args.target_metric ,
                           checkpoint=args.checkpoint, checkpoint_interval=args.checkpoint_interval)
@@ -150,12 +159,12 @@ if __name__ == '__main__':
         logging.info(algo)
 
         t_0 = time()
-        histories = manager.process.train() 
+        histories = manager.process.train()
         delta_t = time() - t_0
         manager.free_comms()
         logging.info("Training finished in {0:.3f} seconds".format(delta_t))
 
-        json_name = '_'.join([model_name,args.trial_name,"history.json"]) 
+        json_name = '_'.join([model_name,args.trial_name,"history.json"])
         manager.process.record_details(json_name,
                                        meta={"args":vars(args)})
         logging.info("Wrote trial information to {0}".format(json_name))
